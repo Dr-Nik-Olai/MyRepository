@@ -1,0 +1,1495 @@
+---
+title: "Monitoring Blood Pressure and Glycemia in Patients with Comorbid Type 2 Diabetes Mellitus and Arterial Hypertension"
+subtitle: "Biostatistics D Course Final Project"
+author: "Nikolai Danilov"
+year: '2024'
+output:
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+------------------------------------------------------------------------
+
+## Introduction
+
+Diabetes mellitus (DM), particularly type 2, and arterial hypertension
+are among the most prevalent chronic diseases worldwide. One of the
+major goals of their clinical management is the prevention or delay of
+complications, as well as the improvement of quality of life. Managing
+blood glucose (BG) and blood pressure (BP) levels is critical for
+reducing the risk of cardiovascular diseases and other complications.
+However, the interaction between BG and BP is complex, and poorly
+controlled levels of either can exacerbate the other, creating a vicious
+cycle of deteriorating health. People with type 2 DM face challenging
+self-management regimens to balance their glycemia and reduce morbidity,
+mortality, and high healthcare costs. Elevated BP values are reported in
+more than two-thirds of patients with type 2 DM, and its progression
+coincides with that of hyperglycemia. The pathogenic relationship
+between DM and hypertension is assumed to be bidirectional.
+
+Digital health optimization enhances patients' awareness of their health
+condition through real-time monitoring, which can lead to more effective
+treatment. Real-time digital communication can include progress reports
+focusing on achieving BP and BG goals, offering insights and guidelines
+that promote lifestyle changes. Using a mobile platform for
+self-management could make it easier for patients with chronic diseases
+to monitor their clinical condition and control their BG and BP levels.
+
+Our project focuses on a retrospective study of a group of patients with
+type 2 DM and poorly controlled arterial hypertension who performed BG
+and BP self-monitoring at home, with full data capture into an
+appropriate mobile platform. The project is based on a follow-up period
+of six months before and after the introduction of BP monitoring, along
+with a control group whose members had never used BP monitoring over a
+period of about two years. The mobile platform collected medical and
+sociodemographic information from these patients.
+
+### The initial dataset's key variables:
+
+-   `mean_BP`: monthly average BP (the core outcome metric) — the mean
+    of all BP measurements in a patient over a 30-day interval
+
+-   `mean_BG`: monthly average BG level (another outcome metric) — the
+    mean of all BG measurements taken in a patient over a 30-day
+    interval
+
+-   `time_centered_bp`: time-centered BP — the time (in months) centered
+    around the start of BP monitoring for each patient. It can obtain
+    values in the range (-6)-6, with 0 indicating the start of BP
+    monitoring, positive values indicating time after the start, and
+    negative values indicating time before the start
+
+### Other relevant variables:
+
+-   `id`: A unique identifier for each patient in the dataset
+
+-   `started_bp`: The time when BP monitoring started for a patient
+
+-   `time`: The overall time period recorded in the dataset
+
+-   `age`: The age of a patient in years
+
+-   `diabetes_type`: The type of DM diagnosed in a patient (type 1, type
+
+    2)  
+
+-   `gender`: The gender of a patient (male, female)
+
+-   `insulin_treatment`: Indicates whether a patient receives insulin
+    treatment ("yes", "no")
+
+-   `register_region`: The region where a patient is registered (e.g.,
+    US, EU, etc.)
+
+-   `diagnosed_since`: The year since when a patient was diagnosed with
+    DM
+
+-   `bmi`: Body mass index (BMI) of a patient
+
+-   `bp_systolic`: Systolic BP
+
+-   `bp_diastolic`: Diastolic BP
+
+-   `bg_fasting`: Fasting BG level
+
+-   `bg_post_meal`: BG level measured after meal
+
+-   `bg_random`: Random BG level measured at an unspecified time
+
+-   `yes_no_bg`: A binary indicator for the presence or absence of BG
+    data
+
+------------------------------------------------------------------------
+
+## 1. Data exploration and identification of issues
+
+In this section, we loaded the dataset from an Excel (.xlsx) file and
+explored the data to identify any significant issues related to blood
+glucose (BG) and blood pressure (BP) levels. We focused on checking for
+missing values and ensuring data consistency.
+
+For the purposes of this study, the "normal" range of mean fasting blood
+glucose was considered to be 80-120 mg/dL, based on the averaged Israeli
+interlaboratory reference values, which are less strict than the World
+Health Organization (WHO) reference values (70-100 mg/dL).
+
+```{r}
+library(readxl)
+library(dplyr)
+```
+
+```{r}
+data <- read_excel("C:/Users/Asus/Desktop/DATA FILES/bio_d_test_use_this_data.xlsx", guess_max = 10000)
+
+data$bg_avg <- as.numeric(data$bg_avg)
+print(class(data$bg_avg)) 
+```
+
+We selected the columns containing the most relevant information about
+BG and BP for our project, creating an adjusted data subset -
+relevant_data. To ensure consistency and avoid misinterpretation of
+variable names as arithmetic operations during R code execution, we
+renamed four variables in this adjusted dataset: `bg_120-150`,
+`bg_70-180`, `bg_180-400`, and `bg_400+`, to `bg_120_150`, `bg_70_180`,
+`bg_180_400`, and `bg_above400`, respectively.
+
+```{r}
+relevant_columns <- c('id', 'started_bp', 'time_centered_bp', 'age', 'diabetes_type', 'gender', 'insulin_treatment', 'diagnosed_since', 'bmi', 'date_of_birth', 'hypertension', 'high_blood_lypids', 'kidney_disease', 'cardiovascular', 'none_comorb', 'challenge_type', 'smoke', 'alcohol_consumption', 'activity_level', 'stress_level', 'ethnicity', 'family_genetics', 'hispanic_origin', 'first_day_bg_measurment', 'first_day_bp_measurment', 'bp_number_events', 'avg_bp_sys', 'avg_bp_dis', 'avg_bp_pulse', 'bg_number_events', 'bg_avg', 'bg_std', 'bg_high_risk', 'bg_60_80', 'bg_80_120', 'bg_120_150', 'bg_180_400', 'bg_above400','bg_post_meal_below_180', 'bg_fasting_below_126', 'yes_no_bp', 'group', 'depression')
+
+relevant_data <- data %>% select(all_of(relevant_columns))
+```
+
+We checked for missing values in these relevant columns.
+
+```{r}
+missing_values <- relevant_data %>%
+  summarise_all(~ sum(is.na(.)))
+print(missing_values)
+```
+
+The results show that for each of the columns in our `relevant_data`
+subset, the count of missing values is 0. This indicates that every cell
+in these columns contains valid data, suggesting that the dataset is
+well-prepared for further analysis.
+
+------------------------------------------------------------------------
+
+## 2. Checking missing data patterns in the main study variables
+
+In this section, we focused on identifying patterns in the missing data
+for the main study variables, as defined by the `relevant_data` subset
+created earlier. Understanding these patterns is crucial for determining
+the appropriate method for handling missing data.
+
+-   Quantitative check: As revealed in the previous section, each
+    variable in the relevant_data subset was found to have 0 missing
+    values, indicating that the main study variables dataset is fully
+    complete with no missing entries.
+
+-   Visual inspection: A missing data pattern plot was generated.
+
+```{r}
+library(VIM)
+
+aggr_plot <- aggr(relevant_data, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, 
+                  labels=names(relevant_data), cex.axis=.7, gap=3, 
+                  ylab=c("Missing data","Pattern"))
+```
+
+The missing data was almost negligible, with only a small proportion
+(1.57%) missing from the `bg_avg` variable, while the remaining
+variables had no missing values.
+
+Given the small percentage of missing data, exclusion (listwise
+deletion) was deemed a reasonable approach to clean the data. Therefore,
+we removed any rows with missing values in the `bg_avg` variable,
+resulting in an adjusted, clean dataset (`relevant_data_clean`) for
+further analysis.
+
+```{r}
+relevant_data_clean <- relevant_data %>%
+  filter(!is.na(bg_avg))
+
+summary(relevant_data_clean$bg_avg)
+```
+
+------------------------------------------------------------------------
+
+## 3. Analysis of insulin treatment, baseline BG, and sample
+
+characteristics
+
+We combined the levels "pen" and "pump" in the `insulin_treatment`
+variable into a single value called "yes" (indicating the presence of
+insulin treatment). This helped streamline the analysis by reducing the
+number of categories. Additionally, we defined "0" in
+`insulin_treatment` as a missing value (NA) to appropriately handle
+cases where insulin treatment information was absent.
+
+```{r}
+relevant_data_clean <- relevant_data_clean %>%
+  mutate(insulin_treatment = case_when(
+    insulin_treatment %in% c("pen", "pump") ~ "yes",
+    insulin_treatment == "no" ~ "no",
+    insulin_treatment == "0" ~ NA_character_,
+    TRUE ~ insulin_treatment
+  ))
+
+print(unique(relevant_data_clean$insulin_treatment))
+```
+
+The baseline BG was defined as the first available BG value (`bg_avg`)
+corresponding to the earliest time point (usually `time_centered_bp` =
+-6) for each unique patient ID.
+
+```{r}
+relevant_data_clean <- relevant_data_clean %>%
+  group_by(id) %>%
+  mutate(baseline_bg = first(bg_avg[time_centered_bp == min(time_centered_bp)])) %>%
+  ungroup()
+
+print(unique(relevant_data_clean$baseline_bg))
+```
+
+With the baseline BG defined, we summarized the key clinical and
+sociodemographic characteristics of the sample while also checking the
+balance between the groups in these variables.
+
+```{r}
+summary_stats_clean <- relevant_data_clean %>%
+  select(age, gender, bmi, hypertension, insulin_treatment, baseline_bg) %>%
+  reframe(
+    Age_Mean = mean(age, na.rm = TRUE),
+    Age_SD = sd(age, na.rm = TRUE),
+    Gender_Distribution = paste0(round(100 * prop.table(table(gender)), 1), "%"),
+    BMI_Mean = mean(bmi, na.rm = TRUE),
+    BMI_SD = sd(bmi, na.rm = TRUE),
+    Hypertension_Count = sum(hypertension == "Yes", na.rm = TRUE),
+    Insulin_Treatment_Distribution = paste0(
+      names(prop.table(table(insulin_treatment, useNA = "ifany"))), ": ",
+      round(100 * prop.table(table(insulin_treatment, useNA = "ifany")), 1), "%",
+      collapse = "; "
+    ),
+    Baseline_BG_Mean = mean(baseline_bg, na.rm = TRUE),
+    Baseline_BG_SD = sd(baseline_bg, na.rm = TRUE)
+  )
+
+print(summary_stats_clean)
+```
+
+Summary statistics of the findings:
+
+-   Age: The mean age of participants is 63.6 years, with a standard
+    deviation (SD) of 11.1 years.
+
+-   Gender distribution: The sample consists of 36.9% males and 63.1%
+    females.
+
+-   BMI: The average BMI is 31.7, with an SD of 6.1.
+
+-   Arterial hypertension: There are no recorded cases of hypertension
+    in the sample.
+
+-   Insulin treatment: The distribution of insulin treatment methods is
+    63% "no," 22.2% "yes" (pen or pump), and 14.8% missing.
+
+-   Baseline BG: The baseline BG has a mean of 146.0, with an SD of
+    37.2.
+
+Everything appeared consistent with the earlier results, and the data
+cleaning seemed to be functioning as expected.
+
+To provide a comprehensive overview of the balance between groups in
+clinical and sociodemographic variables, we created a visualization
+combining box plots for continuous variables (such as age, BMI, and
+baseline BG) and bar plots for categorical variables (such as gender and
+insulin treatment).
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+
+relevant_data_clean <- relevant_data_clean %>%
+  mutate(insulin_treatment = factor(insulin_treatment),
+         gender = factor(gender),
+         hypertension = factor(hypertension))
+
+age_plot_clean <- ggplot(na.omit(relevant_data_clean), aes(x = insulin_treatment, y = age)) +
+  geom_boxplot() +
+  labs(title = "Age by insulin treatment group", x = "Insulin treatment", y = "Age")
+
+bmi_plot_clean <- ggplot(na.omit(relevant_data_clean), aes(x = insulin_treatment, y = bmi)) +
+  geom_boxplot() +
+  labs(title = "BMI by insulin treatment group", x = "Insulin treatment", y = "BMI")
+
+bg_plot_clean <- ggplot(na.omit(relevant_data_clean), aes(x = insulin_treatment, y = baseline_bg)) +
+  geom_boxplot() +
+  labs(title = "Baseline BG by insulin treatment group", x = "Insulin treatment", y = "Baseline BG")
+
+gender_plot_clean <- ggplot(na.omit(relevant_data_clean), aes(x = insulin_treatment, fill = gender)) +
+  geom_bar(position = "fill") +
+  labs(title = "Gender distribution by insulin treatment group", x = "Insulin treatment", y = "Proportion") +
+  scale_fill_brewer(palette = "Set3")
+
+hypertension_plot_clean <- ggplot(na.omit(relevant_data_clean), aes(x = insulin_treatment, fill = hypertension)) +
+  geom_bar(position = "fill") +
+  labs(title = "Hypertension by insulin treatment group", x = "Insulin treatment", y = "Proportion") +
+  scale_fill_brewer(palette = "Set3")
+
+grid.arrange(age_plot_clean, bmi_plot_clean, bg_plot_clean, gender_plot_clean, hypertension_plot_clean, ncol = 2)
+```
+
+Interpretation of the plots:
+
+-   Age: The age distribution appeared quite similar between the "no"
+    and "yes" insulin treatment groups, with no significant outliers or
+    visible differences.
+-   BMI: There seemed to be a slightly higher spread of BMI values in
+    the "yes" insulin treatment group, though the median values were
+    quite close across the groups. A few outliers existed in both
+    groups.
+-   Baseline BG: The baseline BG values showed a wider range in the "no"
+    insulin treatment group, with some notably higher outliers. The
+    "yes" group showed a more condensed distribution, but the median
+    values across both groups seemed to be relatively similar.
+-   Gender distribution: The gender distribution was relatively balanced
+    across both insulin treatment groups, with similar proportions of
+    males and females.
+-   Hypertension: There was no significant difference in hypertension
+    distribution between the two insulin treatment groups, as both
+    showed no cases of arterial hypertension (coded as "0").
+
+These patterns were in line with the summary statistics we reviewed
+earlier, suggesting consistency in the data across both continuous and
+categorical variables.
+
+------------------------------------------------------------------------
+
+## 4. Distribution of BG levels over time by group
+
+In this section, we aimed to present the distribution of BG levels over
+time using a new time variable centered on the beginning of BP
+monitoring. The analysis was divided by the insulin treatment groups.
+
+We created a plot that shows the distribution of BG over time, separated
+by the insulin treatment group. The time variable is centered on the
+start of BP monitoring, marked by `time_centered_bp` = 0.
+
+```{r}
+relevant_data_clean <- relevant_data_clean %>%
+  mutate(insulin_treatment = case_when(
+    insulin_treatment %in% c("pen", "pump") ~ "yes",
+    insulin_treatment == "no" ~ "no",
+    insulin_treatment == "0" ~ NA_character_,
+    TRUE ~ insulin_treatment
+  ))
+
+bg_time_plot_clean <- ggplot(relevant_data_clean, aes(x = time_centered_bp, y = bg_avg, color = insulin_treatment, group = id)) +
+  geom_line(alpha = 0.4) + 
+  geom_smooth(method = "loess", se = FALSE) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "BG distribution over time by insulin treatment group",
+       x = "Time (centered on BP monitoring start)",
+       y = "Mean BG average",
+       color = "Insulin treatment") +
+  theme_minimal()
+
+print(bg_time_plot_clean)
+```
+
+The results led to several key observations:
+
+-   General BG variability: There was substantial variability in BG
+    levels over time, particularly in the group without insulin
+    treatment ("no"). The high spread in the red lines indicates less
+    consistent BG control in patients without insulin treatment.
+
+-   Stable patterns in the "Yes" group: Patients in the "yes" insulin
+    treatment group (turquoise lines) tended to show more consistent BG
+    levels, though there was still variability. The smoother and more
+    consistent patterns in this group may suggest better control over
+    their BG due to insulin therapy.
+
+-   "NA" group trends: The "NA" group (gray lines) appeared to have
+    lower participation and relatively stable BG trends. This group
+    likely represents missing or incomplete insulin treatment data,
+    making it harder to derive strong conclusions.
+
+-   Impact of BP monitoring start (time = 0): The vertical dashed line
+    at time 0 (start of BP monitoring) indicates that there was no
+    immediate drastic change in BG levels across groups at the time BP
+    monitoring begins. However, the overall trends differed between the
+    groups over time.
+
+In conclusion, the differences in BG distribution over time between the
+"yes" and "no" groups suggested that insulin treatment was associated
+with more stable BG levels.
+
+------------------------------------------------------------------------
+
+## 5. Testing group differences in time-related BG fluctuations
+
+In this section, we aimed to fit a statistical model to test the
+differences in BG fluctuations over time, specifically before and after
+the start of BP monitoring. The goal was to understand whether the
+insulin treatment groups ("yes," "no," and NA) exhibit significant
+differences in BG levels related to the timing of BP monitoring. The
+time variable, `time_centered_bp`, has been used in previous tasks and
+was utilized here as well.
+
+A linear mixed-effects model and an interaction plot were employed to
+assess this relationship, accounting for both fixed effects (time and
+insulin treatment) and random effects (individual differences).
+
+```{r}
+library(lme4)
+library(ggplot2)
+
+bg_model_clean <- lmer(bg_avg ~ time_centered_bp * insulin_treatment + (1 | id), data = relevant_data_clean)
+
+summary(bg_model_clean)
+
+interaction_plot_clean <- ggplot(relevant_data_clean, aes(x = time_centered_bp, y = bg_avg, color = insulin_treatment)) +
+  geom_line(aes(group = id), alpha = 0.4) +
+  geom_smooth(method = "loess", se = FALSE) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Interaction between time and insulin treatment on BG Levels",
+       x = "Time (centered on BP monitoring start)",
+       y = "BG average",
+       color = "Insulin treatment") +
+  theme_minimal()
+
+print(interaction_plot_clean)
+```
+
+The model's summary:
+
+-   Intercept (BG average at time = 0): The estimated intercept is 137.2
+    mg/dL (SE = 2.08), representing the baseline BG level at the start
+    of BP monitoring (time = 0) for individuals with no insulin
+    treatment.
+
+-   Time effect (`time_centered_bp`): The time effect is negative
+    (-0.56, p < 0.001), indicating that BG levels decrease as time
+    progresses after the start of BP monitoring. This suggests a
+    significant reduction in BG levels over time.
+
+-   Insulin treatment effect (`insulin_treatment` = yes): The effect of
+    insulin treatment ("yes") is significant (estimate = 22.4, p <
+    0.001). There is a notable positive effect of insulin treatment,
+    which suggests that individuals receiving insulin have a higher
+    baseline BG at the start of monitoring, perhaps due to differences
+    in BG regulation prior to treatment.
+
+-   Interaction effect (`time_centered_bp * insulin_treatment` = yes):
+    The interaction effect is positive but not statistically significant
+    (estimate = 0.31, p = 0.34). This suggests that the rate of BG
+    change over time is not significantly different between individuals
+    receiving insulin treatment and those who are not. The lack of
+    significance in the interaction term between time and insulin
+    treatment could be attributed to individual variability, as
+    reflected in the random effects variance.
+
+The interaction plot interpretation:
+
+-   General trend: The plot shows BG levels across time, centered on the
+    start of BP monitoring (time = 0), separated by insulin treatment
+    groups. The red dashed vertical line represents the start of BP
+    monitoring (time = 0).
+
+-   Insulin treatment ("yes") group: Individuals in the "yes" insulin
+    treatment group (turquoise) show more stable BG levels over time,
+    with less fluctuation compared to the "no" group. This supports the
+    hypothesis that insulin treatment helps to stabilize BG levels.
+
+-   No insulin treatment ("no") group: The "no" group (red) shows
+    greater variability in BG levels both before and after BP
+    monitoring. There are noticeable spikes in the BG levels, suggesting
+    less effective control without insulin.
+
+-   Missing insulin treatment data (NA group): The NA group (gray)
+    appears with fewer individuals, and their BG levels are scattered
+    across the range, making it harder to draw solid conclusions for
+    this group. However, their levels seem more spread out, indicating
+    possible unreported or inconsistent treatment.
+
+-   he interaction plot confirms the findings from the mixed-effects
+    model. Individuals receiving insulin treatment show more stable and
+    controlled BG levels compared to those without insulin treatment.
+    The time variable continues to show a decrease in BG levels post-BP
+    monitoring initiation.
+
+------------------------------------------------------------------------
+
+## 6. Testing whether BP changes over time as a result of BP monitoring
+
+In this section, we used a linear mixed-effects model to assess whether
+BP changes over time after the start of BP monitoring. Specifically, we
+aimed to understand whether different BP measures — systolic BP
+(`avg_bp_sys`), diastolic BP (`avg_bp_dis`), and pulse BP
+(`avg_bp_pulse`) — behave differently over time. The time variable used
+for this analysis, `time_centered_bp`, is centered around the beginning
+of BP monitoring (time = 0).
+
+The mixed-effects model included both fixed effects (time and BP type)
+and random effects to account for individual differences.
+
+```{r}
+library(tidyr)
+library(lme4)
+library(dplyr)
+library(ggplot2)
+
+relevant_data_clean <- relevant_data_clean %>%
+  mutate(avg_bp_sys = as.numeric(avg_bp_sys),
+         avg_bp_dis = as.numeric(avg_bp_dis))
+
+relevant_data_clean <- relevant_data_clean %>%
+  mutate(avg_bp_pulse = avg_bp_sys - avg_bp_dis)
+
+head(select(relevant_data_clean, avg_bp_sys, avg_bp_dis, avg_bp_pulse))
+
+data_long_clean <- relevant_data_clean %>%
+  pivot_longer(cols = c(avg_bp_sys, avg_bp_dis, avg_bp_pulse), 
+               names_to = "bp_type", 
+               values_to = "bp_value")
+
+bp_model_clean <- lmer(bp_value ~ time_centered_bp * bp_type + (1 | id), data = data_long_clean)
+
+summary(bp_model_clean)
+
+bp_combined_plot_clean <- ggplot(data_long_clean, aes(x = time_centered_bp, y = bp_value, color = bp_type)) +
+  geom_line(aes(group = id), alpha = 0.4) +
+  geom_smooth(method = "loess", se = FALSE) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Interaction between time and BP types",
+       x = "Time (centered on BP monitoring start)",
+       y = "BP average",
+       color = "BP type") +
+  theme_minimal()
+
+print(bp_combined_plot_clean)
+```
+
+The model's results:
+
+A. Fixed effects:
+
+-   The intercept for BP value was 83.47, indicating the baseline BP
+    when time = 0 (at the start of BP monitoring).
+
+-   The time-centered BP effect was estimated at -0.46, meaning that BP
+    generally decreased over time after the initiation of BP monitoring.
+    This result is statistically significant (t = -3.761, p < 0.05).
+
+-   The coefficient for pulse BP was -31.42, showing that pulse BP
+    values are significantly lower than systolic BP values (which had a
+    coefficient of 51.89).
+
+-   The interaction between time and pulse BP was 0.0252, indicating
+    that pulse BP does not change significantly over time compared to
+    systolic BP.
+
+-   The interaction between time and systolic BP was -0.38, suggesting
+    that systolic BP decreases slightly more over time than diastolic BP
+    or pulse BP (t = -2.240, p < 0.05).
+
+B. Random effects:
+
+-   The random intercept for individual variability (across `id`) had a
+    variance of 52.08, with a SD of 7.217, indicating that there is
+    considerable variation in baseline BP values between individuals.
+
+-   The residual variance for BP values was 49.03, with a SD of 7.002,
+    showing the unexplained variability after accounting for time and BP
+    type.
+
+The model suggests that BP generally decreases slightly over time after
+the start of BP monitoring. However, the change in pulse BP over time is
+not significant, while systolic BP shows a small but statistically
+significant decline. This may indicate that systolic BP is more
+sensitive to the effects of BP monitoring than pulse BP or diastolic BP.
+Additionally, the random effects demonstrate substantial variability in
+BP levels across individuals, emphasizing the need to account for
+individual differences when analyzing longitudinal BP data.
+
+The plot confirms that systolic BP remains consistently higher compared
+to diastolic BP and pulse BP. The green line representing pulse BP falls
+between systolic and diastolic BP as expected. The plot visually
+reinforces the model's results that while there are baseline differences
+between the BP types, their changes over time are minor, particularly
+for pulse BP.
+
+------------------------------------------------------------------------
+
+## 7. Testing the association between BG and BP
+
+The objective of this task was to examine the relationship between BG
+levels (`bg_avg`) and various measures of BP, including systolic BP
+(`avg_bp_sys`), diastolic BP (`avg_bp_dis`), and pulse BP
+(`avg_bp_pulse`). Given that systolic and diastolic BP are closely
+related, multicollinearity between these variables could be a concern
+when fitting a statistical model. Therefore, we began by exploring the
+correlation matrix for these variables and conducting a
+multicollinearity check using variance inflation factors (VIFs). We
+aimed to fit a linear mixed-effects model to assess the association
+between BG levels and BP while accounting for potential confounding
+factors, such as random effects related to individual participants
+(`id`).
+
+```{r}
+library(lme4)
+library(car)
+
+cor_matrix <- cor(relevant_data_clean[, c("bg_avg", "avg_bp_sys", "avg_bp_dis", "avg_bp_pulse")], use = "complete.obs")
+print(cor_matrix)
+
+model <- lmer(bg_avg ~ avg_bp_sys + avg_bp_dis + avg_bp_pulse + (1|id), data = relevant_data_clean, REML=FALSE)
+
+vif_values <- vif(model)
+print(vif_values)
+```
+
+The model's results:
+
+A. Correlation matrix:
+
+-   The correlation between `avg_bp_sys` and `avg_bp_dis` is high
+    (0.79), which confirms multicollinearity between these 2 variables.
+
+-   The correlation between `avg_bp_sys` and `avg_bp_pulse` is 0.70,
+    which is also moderately high.
+
+-   The correlation between `avg_bp_dis` and `avg_bp_pulse` is lower
+    (0.10), but still, multicollinearity might be an issue when all 3
+    are included in the same model.
+
+B. VIF:
+
+-   The VIF values for all 3 BP variables (`avg_bp_sys`, `avg_bp_dis`,
+    `avg_bp_pulse`) are high (above 3.29). This indicates significant
+    multicollinearity, as VIF values >5 typically suggest problematic
+    multicollinearity, though values >3 can also signal concerns in
+    smaller models.
+
+-   The model even notes that the matrix is rank deficient, meaning that
+    there is redundancy between the predictors.
+
+The high VIF values and the correlation matrix both indicate that
+multicollinearity is a serious issue when trying to include all 3 BP
+measures (systolic, diastolic, and pulse) in the same model. This
+multicollinearity likely led to the instability of the regression
+coefficients and the warnings regarding the model's rank deficiency.
+
+------------------------------------------------------------------------
+
+## 8. Testing a mediation model with moderation effects
+
+In this section, we aimed to examine whether the relationship between
+stress levels and BG was mediated by BP and further moderated by
+specific factors such as gender, time of BP measurement, arterial
+hypertension, age, depression, absence of comorbidities, and smoking
+status. The analysis involved:
+
+-   Testing the mediation model: stress level → BP → BG.
+
+-   Evaluating whether the specified moderators influenced the
+    relationship between stress levels and BP.
+
+In our mediation model, we considered two BP measures: systolic BP and
+diastolic BP. Pulse BP was excluded from the analysis due to its direct
+dependence on both systolic and diastolic BP. Pulse BP, being defined as
+the difference between systolic and diastolic BP, would inherently be
+affected by changes in either of these variables. Including all three
+variables in the model would have introduced unnecessary
+multicollinearity, potentially leading to estimation issues and reduced
+model reliability, as was demonstrated in the previous chapter. Since
+pulse BP could be indirectly calculated from systolic and diastolic BP,
+the model was simplified by focusing on these two core measures to
+achieve more stable and interpretable results.
+
+To begin, we tested a mediation model to evaluate whether the
+relationship between stress levels and BG was mediated by BP,
+considering systolic and diastolic BP as mediators.
+
+```{r}
+library(lavaan)
+
+mediation_model_bp <- '
+  avg_bp_sys ~ a1 * stress_level
+  avg_bp_dis ~ a2 * stress_level
+  
+  bg_avg ~ b1 * avg_bp_sys + b2 * avg_bp_dis + c_prime * stress_level
+  
+  indirect_sys := a1 * b1
+  indirect_dis := a2 * b2
+  total_indirect := indirect_sys + indirect_dis
+  
+  total_effect := c_prime + total_indirect
+'
+
+fit_bp <- sem(mediation_model_bp, data = relevant_data_clean)
+summary(fit_bp, fit.measures = TRUE, standardized = TRUE)
+```
+
+The overall fit of the model was poor, as indicated by the fit indices
+(CFI = 0.035, RMSEA = 1.140, SRMR = 0.266), suggesting that the
+specified model does not fully capture the relationships between the
+variables in this dataset. However, specific pathways within the model
+provided meaningful insights into the mediation effects.
+
+The model's key findings:
+
+-   Stress significantly predicted systolic and diastolic BP. Higher
+    stress levels were associated with higher systolic BP (p < 0.001)
+    and diastolic BP (p < 0.001).
+
+-   Systolic BP significantly predicted BG (p < 0.001), indicating that
+    an increase in systolic BP was associated with a small but
+    significant rise in BG levels. However, diastolic BP did not have a
+    significant impact on BG (p = 0.948).
+
+-   The indirect effect of stress on BG through systolic BP was
+    significant, indicating a mediation pathway where stress influenced
+    BG via its impact on systolic BP. The indirect effect through
+    diastolic BP was not significant.
+
+-   The total effect of stress on BG, including both direct and indirect
+    pathways, was significant (p = 0.001). Interestingly, stress had a
+    direct negative effect on BG, meaning that after accounting for the
+    indirect effects via BP, higher stress levels were associated with
+    lower BG.
+
+Conclusion: The mediation analysis suggests that systolic BP partially
+mediates the relationship between stress and BG, whereas diastolic BP
+does not play a significant mediating role. While the model fit was
+suboptimal, the significant indirect effect through systolic BP
+highlights the role of BP as a link between stress and BG levels.
+Further refinement of the model could improve its explanatory power and
+fit, but these findings provide useful insights for understanding the
+stress-BP-BG relationship in the population under study.
+
+To further investigate the relationships identified in the mediation
+model, we focused on the direct effects of stress levels on systolic and
+diastolic BP, as well as the effects of systolic and diastolic BP on BG.
+Additionally, we examined the overall direct effect of stress levels on
+BG.
+
+Scatterplots were created to visually represent these relationships:
+
+1)  stress level and systolic BP
+
+2)  stress level and diastolic BP
+
+3)  Systolic BP and BG
+
+4)  Diastolic BP and BG
+
+```{r}
+library(ggplot2)
+
+plot1 <- ggplot(relevant_data_clean, aes(x = stress_level, y = avg_bp_sys)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Stress level vs. Systolic BP", x = "Stress level", y = "Systolic BP")
+
+plot2 <- ggplot(relevant_data_clean, aes(x = stress_level, y = avg_bp_dis)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Stress level vs. Diastolic BP", x = "Stress level", y = "Diastolic BP")
+
+plot3 <- ggplot(relevant_data_clean, aes(x = avg_bp_sys, y = bg_avg)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Systolic BP vs. BG", x = "Systolic BP", y = "BG")
+
+plot4 <- ggplot(relevant_data_clean, aes(x = avg_bp_dis, y = bg_avg)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Diastolic BP vs. BG", x = "Diastolic BP", y = "BG")
+
+print(plot1)
+print(plot2)
+print(plot3)
+print(plot4)
+```
+
+These plots highlight the following key patterns:
+
+1)  stress level and systolic BP: The scatterplot indicates a positive
+    association, with higher stress levels corresponding to an increase
+    in systolic BP. This aligns with our earlier finding that stress
+    significantly predicts systolic BP.
+
+2)  stress level and diastolic BP: Similarly, a positive relationship is
+    observed between stress levels and diastolic BP, though the effect
+    appears less pronounced compared to systolic BP.
+
+3)  systolic BP and BG: The plot shows a noticeable upward trend,
+    indicating that increases in systolic BP are associated with higher
+    BG levels. This supports the significant direct effect of systolic
+    BP on BG found in our mediation model.
+
+4)  diastolic BP and BG: The scatterplot does not show a clear trend,
+    confirming that diastolic BP does not have a significant direct
+    effect on BG, as revealed by the mediation analysis.
+
+These visualizations further support our statistical findings by
+illustrating the relationships between stress, BP, and BG, providing a
+clearer understanding of the direct effects observed in the model.
+
+Then we examined the specific variables (`gender`, `time_centered_bp`,
+`hypertension`, `age`, `depression`, `none_comorb`, and `smoke`) as
+possible moderators in relation to the mediation model "stress_level →
+BP → BG", concentrating on statistically significant findings.
+
+We proceeded by examining specific variables — gender (`gender`), time
+of BP measurement (`time_centered_bp`), arterial hypertension
+(`hypertension`), age (`age`), depression (`depression`), absence of
+comorbidities (`none_comorb`), and smoking status (`smoke`) — as
+potential moderators in our mediation model ("stress level → BP → BG").
+Our goal was to identify whether these factors significantly influenced
+the strength or direction of the relationships between stress, BP, and
+BG.
+
+### Moderation by gender
+
+We examined whether gender moderated the relationship between stress
+levels, BP, and BG. The analysis included testing for interaction
+effects between stress levels and gender on both systolic and diastolic
+BP, and subsequently on BG.
+
+```{r}
+relevant_data_clean$gender <- as.numeric(as.factor(relevant_data_clean$gender)) - 1
+relevant_data_clean$stress_level <- as.numeric(relevant_data_clean$stress_level)
+
+relevant_data_clean$stress_gender <- relevant_data_clean$stress_level * relevant_data_clean$gender
+
+moderation_model_gender_interaction <- '
+  avg_bp_sys ~ a1 * stress_level + m1 * gender + i1 * stress_gender
+  avg_bp_dis ~ a2 * stress_level + m2 * gender + i2 * stress_gender
+  bg_avg ~ b1 * avg_bp_sys + b2 * avg_bp_dis + c_prime * stress_level
+
+  # Indirect effects
+  indirect_sys_gender := a1 * b1
+  indirect_dis_gender := a2 * b2
+  total_indirect_gender := indirect_sys_gender + indirect_dis_gender
+
+  # Total effect
+  total_effect := c_prime + total_indirect_gender
+'
+
+fit_gender_interaction <- sem(moderation_model_gender_interaction, data = relevant_data_clean)
+summary(fit_gender_interaction, fit.measures = TRUE, standardized = TRUE)
+```
+
+The model's key findings:
+
+A. Systolic BP: Stress level did not have a significant effect on
+systolic BP when moderated by gender (p = 0.234). The interaction
+between stress and gender was not significant, indicating that the
+effect of stress on systolic BP was not substantially different for men
+and women.
+
+B. Diastolic BP: The interaction between stress level and gender was
+significant (p = 0.040), suggesting that the effect of stress on
+diastolic BP differs between genders. Specifically, women showed a
+stronger reduction in diastolic BP in response to stress compared to
+men.
+
+C. BG: Neither systolic BP (p = 0.324) nor diastolic BP (p = 0.642)
+mediated the relationship between stress and BG when moderated by
+gender. Additionally, the total effect of stress on BG, accounting for
+the indirect effects of systolic and diastolic BP, was not significant
+(p = 0.673).
+
+Conclusion: Gender significantly moderated the effect of stress on
+diastolic BP but not on systolic BP or BG. The interaction analysis
+indicates that women may experience a stronger reduction in diastolic BP
+under stress, but this does not translate into significant changes in BG
+levels in either gender. Further exploration may be needed to better
+understand the underlying mechanisms driving these gender differences in
+BP response to stress.
+
+### Moderation by centered time of the BP measurement
+
+We explored whether the time of BP measurement moderated the
+relationship between stress levels, BP, and BG by testing for
+interaction effects between stress levels and the centered time of BP
+measurement on both systolic and diastolic BP, and subsequently on BG.
+
+```{r}
+relevant_data_clean$stress_time <- relevant_data_clean$stress_level * relevant_data_clean$time_centered_bp
+
+moderation_model_time_interaction <- '
+  avg_bp_sys ~ a1 * stress_level + m1 * time_centered_bp + i1 * stress_time
+  avg_bp_dis ~ a2 * stress_level + m2 * time_centered_bp + i2 * stress_time
+  bg_avg ~ b1 * avg_bp_sys + b2 * avg_bp_dis + c_prime * stress_level
+
+  # Indirect effects
+  indirect_sys_time := a1 * b1 + i1
+  indirect_dis_time := a2 * b2 + i2
+  total_indirect_time := indirect_sys_time + indirect_dis_time
+
+  # Total effect
+  total_effect := c_prime + total_indirect_time
+'
+
+fit_time_interaction <- sem(moderation_model_time_interaction, data = relevant_data_clean)
+summary(fit_time_interaction, fit.measures = TRUE, standardized = TRUE)
+```
+
+The model's key findings:
+
+A. Systolic BP: The interaction between stress level and the time of BP
+measurement did not significantly affect systolic BP (p = 0.915). This
+indicates that the time at which BP was measured did not alter the
+effect of stress on systolic BP.
+
+B. Diastolic BP: While the time of BP measurement significantly
+influenced diastolic BP (p < 0.001), the interaction between stress and
+the time of measurement was not significant (p = 0.477). This suggests
+that, although the time of measurement affects diastolic BP levels, it
+does not moderate the relationship between stress and diastolic BP.
+
+C. BG: The indirect effects of stress on BG through systolic and
+diastolic BP were not significant (p = 0.927 for systolic BP; p = 0.466
+for diastolic BP), and the total effect of stress on BG, accounting for
+time of BP measurement, was also not significant (p = 0.630).
+
+Conclusion: The time of BP measurement significantly affected both
+systolic and diastolic BP but did not moderate the relationship between
+stress and BP, nor did it have a meaningful impact on the overall
+relationship between stress and BG. These findings suggest that while BP
+naturally fluctuates with time, the influence of stress on BP and BG
+remains consistent regardless of the time of measurement.
+
+### Moderation by arterial hypertension
+
+We tested whether arterial hypertension moderated the relationship
+between stress levels, BP, and BG, focusing on both systolic and
+diastolic BP as mediators and BG as the outcome variable.
+
+```{r}
+relevant_data_clean$hypertension <- as.numeric(as.factor(relevant_data_clean$hypertension))
+colSums(is.na(relevant_data_clean[c("stress_level", "hypertension")]))
+
+relevant_data_clean$stress_hypertension <- relevant_data_clean$stress_level * relevant_data_clean$hypertension
+
+moderation_model_hypertension_interaction <- '
+  avg_bp_sys ~ a1 * stress_level + m1 * hypertension + i1 * stress_hypertension
+  avg_bp_dis ~ a2 * stress_level + m2 * hypertension + i2 * stress_hypertension
+  bg_avg ~ b1 * avg_bp_sys + b2 * avg_bp_dis + c_prime * stress_level + 
+           hypertension + stress_hypertension
+  
+  # Indirect effects
+  indirect_sys_hypertension := a1 * b1
+  indirect_dis_hypertension := a2 * b2
+  total_indirect_hypertension := indirect_sys_hypertension + indirect_dis_hypertension
+  
+  # Total effect
+  total_effect := c_prime + total_indirect_hypertension
+'
+
+fit_hypertension_interaction <- sem(moderation_model_hypertension_interaction, data = relevant_data_clean)
+summary(fit_hypertension_interaction, fit.measures = TRUE, standardized = TRUE)
+```
+
+The model's key findings:
+
+A. Systolic and diastolic BP: The interaction between stress and
+hypertension did not significantly affect systolic BP (p = 0.657) or
+diastolic BP (p = 0.489). This indicates that hypertension did not
+moderate the relationship between stress and BP.
+
+B. BG: Hypertension had a significant direct effect on BG (p < 0.001),
+with individuals with hypertension showing higher BG levels. The
+interaction between stress and hypertension had a negative effect on BG
+(p < 0.001), suggesting that the effect of stress on BG is weaker for
+individuals with hypertension.
+
+C. Indirect effects: The indirect effects of stress on BG through
+systolic and diastolic BP were not significant (p = 0.658 and p = 0.292,
+respectively), and the total indirect effect was also not significant (p
+= 0.365).
+
+D. Total effect: The total effect of stress on BG, accounting for
+hypertension, was significant (p = 0.001), indicating that stress still
+had a direct impact on BG even after considering the mediating and
+moderating variables.
+
+Conclusion: While hypertension significantly increased BG levels, it did
+not moderate the relationship between stress and BP. However, the
+interaction between stress and hypertension negatively influenced BG,
+meaning that individuals with hypertension experienced a weaker effect
+of stress on their BG levels. These findings highlight the complex
+relationship between stress, BP, BG, and hypertension.
+
+### Moderation by age
+
+We investigated whether age moderated the relationship between stress
+levels, BP, and BG. The analysis included testing interaction effects
+between stress levels and age on systolic and diastolic BP, as well as
+their indirect effects on BG.
+
+```{r}
+relevant_data_clean$age <- as.numeric(relevant_data_clean$age)
+
+relevant_data_clean$stress_age <- relevant_data_clean$stress_level * relevant_data_clean$age
+
+moderation_model_age_interaction <- '
+  avg_bp_sys ~ a1 * stress_level + m1 * age + i1 * stress_age
+  avg_bp_dis ~ a2 * stress_level + m2 * age + i2 * stress_age
+  bg_avg ~ c_prime * stress_level + a1 * avg_bp_sys + a2 * avg_bp_dis
+
+  # Indirect effects
+  indirect_sys_age := a1 * m1
+  indirect_dis_age := a2 * m2
+  total_indirect_age := indirect_sys_age + indirect_dis_age
+
+  # Total effect
+  total_effect := c_prime + total_indirect_age
+'
+
+fit_age_interaction <- sem(moderation_model_age_interaction, data = relevant_data_clean)
+summary(fit_age_interaction, fit.measures = TRUE, standardized = TRUE)
+```
+
+The model's key findings:
+
+A. Systolic BP: Stress level had a significant positive effect on
+systolic BP (p < 0.001), but the interaction between stress and age was
+not significant (p = 0.092). This suggests that while stress affects
+systolic BP, the relationship does not significantly change with age.
+
+B. Diastolic BP: Age had a significant negative effect on diastolic BP
+(p < 0.001), meaning that as age increases, diastolic BP decreases.
+However, the interaction between stress and age on diastolic BP was not
+significant (p = 0.750).
+
+C. BG:
+
+-   The indirect effect of stress on BG through systolic BP was
+    significant (p = 0.005), while the indirect effect through diastolic
+    BP was not significant (p = 0.642). This indicates that stress
+    influences BG levels indirectly via systolic BP, but not through
+    diastolic BP.
+
+-   The total indirect effect of stress on BG, considering age as a
+    moderator, was significant (p = 0.033), but the overall direct
+    effect of stress on BG remained insignificant (p = 0.952).
+
+Conclusion: While age significantly influenced diastolic BP and
+partially moderated the indirect effects of stress on BG through
+systolic BP, the overall moderation effect of age on the stress-BP-BG
+relationship was limited. The indirect pathway through systolic BP
+remained significant, but age did not drastically alter the relationship
+between stress and BP, nor the overall impact of stress on BG.
+
+### Depression-moderated mediation model
+
+We tested whether depression moderated the relationship between stress
+levels, BP, and BG, using both systolic and diastolic BP as mediators.
+
+```{r}
+library(lavaan)
+
+moderation_model_depression_interaction <- '
+  avg_bp_sys ~ a1 * stress_level + m1 * depression
+  avg_bp_dis ~ a2 * stress_level + m2 * depression
+  bg_avg ~ b1 * avg_bp_sys + b2 * avg_bp_dis + c_prime * stress_level + 
+           depression
+  
+  indirect_sys_depression := a1 * b1
+  indirect_dis_depression := a2 * b2
+  total_indirect_depression := indirect_sys_depression + indirect_dis_depression
+  
+  total_effect := c_prime + total_indirect_depression
+'
+
+fit_depression_interaction <- sem(moderation_model_depression_interaction, data = relevant_data_clean)
+
+summary(fit_depression_interaction, fit.measures = TRUE, standardized = TRUE)
+```
+
+The model's key findings:
+
+A. Direct effects:
+
+-   Stress levels had a significant negative effect on systolic BP
+    (estimate = -0.142, p < 0.001), suggesting that higher stress is
+    associated with lower systolic BP.
+
+-   Depression showed a significant positive effect on systolic BP
+    (estimate = 1.180, p < 0.001), indicating that higher depression
+    levels were associated with increased systolic BP.
+
+-   Stress levels had a significant positive effect on diastolic BP
+    (estimate = 0.470, p < 0.001), implying that higher stress is
+    linked to higher diastolic BP.
+
+-   Depression also had a significant positive effect on diastolic BP
+    (estimate = 0.681, p < 0.001).
+
+-   Both systolic and diastolic BP significantly predicted BG levels
+    (systolic: estimate = 0.177, p < 0.001; diastolic: estimate =
+    0.363, p < 0.001).
+
+-   Stress had a significant negative direct effect on BG levels
+    (estimate = -0.818, p < 0.001), suggesting that higher stress
+    levels were associated with lower BG levels.
+
+-   Depression had a significant negative direct effect on BG levels
+    (estimate = -2.789, p < 0.001), indicating that higher depression
+    levels are associated with lower BG levels.
+
+B. Indirect effects:
+
+-   The indirect effect of depression through systolic BP on BG was
+    small but significant (estimate = -0.025, p < 0.001).
+
+-   The indirect effect of depression through diastolic BP on BG was
+    positive and significant (estimate = 0.171, p < 0.001).
+
+-   The combined indirect effect of depression via systolic and
+    diastolic BP was significant (estimate = 0.146, p < 0.001),
+    indicating that the total mediation effect was positive.
+
+C. Total effect: The total effect of stress and depression on BG was
+negative (estimate = -0.673, p < 0.001), highlighting the overall
+negative association between stress, depression, and BG levels.
+
+Conclusion: The model highlights the significant impact of both stress
+and depression on BP and BG levels. While stress generally lowered
+systolic BP and BG levels, depression had a more complex effect, raising
+both systolic and diastolic BP, yet lowering BG directly. The indirect
+effects of depression through systolic and diastolic BP indicate that
+depression mediates the relationship between stress and BG via BP
+changes.
+
+### Comorbidity-moderated mediation model
+
+In this model, the relationships between stress levels, BP, and blood
+glucose (BG) were analyzed, considering the potential moderating effect
+of comorbidities. Specifically, the interaction between stress and the
+absence of comorbidities (`none_comorb`) was examined.
+
+```{r}
+relevant_data_clean$avg_bp_sys <- as.numeric(relevant_data_clean$avg_bp_sys)
+relevant_data_clean$avg_bp_dis <- as.numeric(relevant_data_clean$avg_bp_dis)
+relevant_data_clean$none_comorb <- as.numeric(relevant_data_clean$none_comorb)
+
+summary(relevant_data_clean$avg_bp_sys)
+summary(relevant_data_clean$avg_bp_dis)
+summary(relevant_data_clean$none_comorb)
+
+relevant_data_clean$stress_none_comorb <- relevant_data_clean$stress_level * relevant_data_clean$none_comorb
+relevant_data_clean$avg_bp_sys_none_comorb <- relevant_data_clean$avg_bp_sys * relevant_data_clean$none_comorb
+relevant_data_clean$avg_bp_dis_none_comorb <- relevant_data_clean$avg_bp_dis * relevant_data_clean$none_comorb
+
+mediation_model_none_comorb <- '
+  avg_bp_sys ~ a1 * stress_level + m1 * stress_none_comorb
+  avg_bp_dis ~ a2 * stress_level + m2 * stress_none_comorb
+  
+  bg_avg ~ b1 * avg_bp_sys + b2 * avg_bp_dis + c_prime * stress_level +
+           n1 * avg_bp_sys_none_comorb + n2 * avg_bp_dis_none_comorb
+  
+  indirect_sys_none_comorb := a1 * b1 + m1 * n1
+  indirect_dis_none_comorb := a2 * b2 + m2 * n2
+  total_indirect_none_comorb := indirect_sys_none_comorb + indirect_dis_none_comorb
+  
+  total_effect := c_prime + total_indirect_none_comorb
+'
+
+fit_none_comorb <- sem(mediation_model_none_comorb, data = relevant_data_clean)
+summary(fit_none_comorb, fit.measures = TRUE, standardized = TRUE)
+```
+
+The model's key results:
+
+A. Direct effects:
+
+-   The direct effect of stress on systolic BP was weak and negative,
+    with an estimate of -0.031 (p < 0.001).
+
+-   Stress had a stronger direct positive effect on diastolic BP, with
+    an estimate of 0.540 (p < 0.001).
+
+-   The interaction of stress with the absence of comorbidities
+    significantly decreased both systolic BP (-1.249) and diastolic BP
+    (-0.818), both with high statistical significance (p < 0.001).
+
+B. Impact on BG:
+
+-   Both systolic and diastolic BP significantly contributed to changes
+    in BG, with estimates of 0.126 and 0.442, respectively (p < 0.001
+    for both).
+
+-   Stress had a direct negative impact on BG, with an estimate of
+    -1.068 (p < 0.001).
+
+-   The interaction with comorbidities significantly affected the
+    relationship between BP and BG.
+
+C. Indirect effects:
+
+-   The indirect effect of systolic BP on BG through comorbidity was
+    -0.806 (p < 0.001), while for diastolic BP, it was positive at
+    1.096 (p < 0.001).
+
+-   The total indirect effect combining both systolic and diastolic BP
+    through comorbidity was 0.291 (p < 0.001).
+
+D. Total effect: The overall total effect of stress on BG was -0.777 (p
+< 0.001), indicating that stress, moderated by the absence of
+comorbidities, tends to lower BG levels.
+
+Conclusion: Stress affects BP and BG differently depending on the
+presence or absence of comorbidities. Overall, the absence of
+comorbidities enhances the impact of stress on BP and BG, highlighting
+the importance of considering comorbidity status when assessing the
+physiological effects of stress.
+
+### Smoking-moderated mediation model
+
+The analysis was aimed at exploring the moderating effect of smoking on
+the relationship between stress, BP, and BG.
+
+```{r}
+relevant_data_clean$smoke <- as.numeric(as.factor(relevant_data_clean$smoke))
+
+relevant_data_clean$stress_level_smoke <- relevant_data_clean$stress_level * relevant_data_clean$smoke
+relevant_data_clean$avg_bp_sys_smoke <- relevant_data_clean$avg_bp_sys * relevant_data_clean$smoke
+relevant_data_clean$avg_bp_dis_smoke <- relevant_data_clean$avg_bp_dis * relevant_data_clean$smoke
+
+mediation_model_smoke <- '
+  avg_bp_sys ~ a1 * stress_level + m1 * stress_level_smoke
+  avg_bp_dis ~ a2 * stress_level + m2 * stress_level_smoke
+  
+  bg_avg ~ b1 * avg_bp_sys + n1 * avg_bp_sys_smoke
+  bg_avg ~ b2 * avg_bp_dis + n2 * avg_bp_dis_smoke
+  bg_avg ~ c_prime * stress_level
+  
+  indirect_sys_smoke := a1 * b1 + m1 * n1
+  indirect_dis_smoke := a2 * b2 + m2 * n2
+    total_indirect_smoke := indirect_sys_smoke + indirect_dis_smoke
+  
+  total_effect := c_prime + total_indirect_smoke
+'
+
+fit_smoke <- sem(mediation_model_smoke, data = relevant_data_clean)
+summary(fit_smoke, fit.measures = TRUE, standardize = TRUE, rsquare = TRUE)
+```
+
+The model's key findings:
+
+A. Direct effects:
+
+-   The direct effect of stress on systolic BP was negative but not
+    statistically significant (p = 0.258).
+
+-   The direct effect of stress on diastolic BP was significant and
+    positive (p = 0.017), meaning that stress significantly increases
+    diastolic BP.
+
+-   The interaction effect of stress and smoking on systolic BP was not
+    significant (p = 0.388), indicating that smoking doesn't
+    significantly alter the relationship between stress and systolic BP.
+
+-   The interaction effect of stress and smoking on diastolic BP was not
+    significant (p = 0.451), indicating that smoking doesn't
+    significantly alter the relationship between stress and diastolic
+    BP.
+
+B. Indirect effects:
+
+-   The indirect effect of systolic BP on BG was negative but not
+    statistically significant (p = 0.266).
+
+-   The indirect effect of diastolic BP on BG was significant (p =
+    0.032), suggesting that smoking moderates the pathway from stress to
+    BG through diastolic BP.
+
+Total effect:
+
+-   The total indirect effect of smoking was significant (p = 0.025),
+    implying that smoking plays a significant role in moderating the
+    relationship between stress and BG through BP.
+
+-   The overall total effect of stress on BG, considering the direct and
+    indirect pathways, was significant (p = 0.005), with a negative
+    impact of stress on BG, indicating that higher stress reduces BG
+    when moderated by smoking.
+
+Conclusion: The results indicate that smoking significantly moderates
+the pathway between stress and BG, primarily through diastolic BP.
+Although stress alone does not have a significant impact on systolic BP,
+it does increase diastolic BP, which in turn significantly affects BG.
+Smoking enhances these effects, particularly in the diastolic BP
+pathway.
+
+------------------------------------------------------------------------
+
+## 9. Creating a predictive model of BG clinical peaks
+
+The aim of this section was to develop and validate a predictive model
+for BG clinical peaks, using a cutoff of 200 mg/dL for BG values. Given
+that the outcome (BG peaks) is binary, we utilized logistic regression
+for model development.
+
+We began by creating a binary variable, `bg_peak`, where a value of 1
+indicates a BG peak (BG ≥ 200), and 0 indicates no peak (BG < 200). The
+following variables, as specified in the dataset’s codebook, were used
+as predictors: `age`, `diabetes_type`, `gender`, `insulin_treatment`,
+`hypertension`, `smoke`, `avg_bp_sys`, `avg_bp_dis`, `activity_level`,
+`stress_level`, and `bg_number_events`.
+
+The data was split into training (70%) and testing (30%) sets. The
+logistic regression model was built using the training data, and its
+performance was evaluated on the test set. A confusion matrix summarized
+the model's classification accuracy, and the ROC curve provided insight
+into its ability to distinguish between BG peaks and non-peaks.
+
+```{r}
+library(caret)
+library(glmnet)
+
+relevant_data_clean$bg_peak <- ifelse(relevant_data_clean$bg_avg >= 200, 1, 0)
+
+predictors <- c("age", "diabetes_type", "gender", "insulin_treatment", "hypertension", "smoke", "avg_bp_sys", "avg_bp_dis", "activity_level", "stress_level", "bg_number_events")
+
+data_model <- relevant_data_clean[, c("bg_peak", predictors)]
+
+data_model_clean <- na.omit(data_model)
+
+set.seed(123)
+trainIndex <- createDataPartition(data_model_clean$bg_peak, p = 0.7, list = FALSE)
+trainData <- data_model_clean[trainIndex, ]
+testData <- data_model_clean[-trainIndex, ]
+
+logit_model <- glm(bg_peak ~ ., data = trainData, family = binomial)
+
+summary(logit_model)
+
+predictions <- predict(logit_model, newdata = testData, type = "response")
+testData$predicted_class <- ifelse(predictions > 0.5, 1, 0)
+
+confusionMatrix(as.factor(testData$predicted_class), as.factor(testData$bg_peak))
+
+importance <- varImp(logit_model, scale = FALSE)
+print(importance)
+
+plot(importance)
+
+library(pROC)
+roc_curve <- roc(testData$bg_peak, predictions)
+plot(roc_curve, main = "ROC curve for BG peaks prediction")
+
+```
+
+The model's key findings:
+
+A. Accuracy:
+
+-   The ROC curve showed a reasonable predictive capacity, with an AUC
+    of 0.85, reflecting the model's strong ability to distinguish
+    between BG peaks (BG ≥ 200 mg/dL) and non-peaks.
+
+-   The sensitivity (ability to detect BG non-peaks) was high at
+    99.48%, while the specificity (ability to detect true BG peaks)
+    was lower at 30%. This indicates the model is very good at
+    identifying non-peaks but less effective in detecting peaks.
+
+-   The balanced accuracy of the model was 64.74%, indicating moderate
+    overall predictive ability.
+
+B. Confusion matrix: The confusion matrix further highlighted the
+model's performance, with an overall accuracy of 96.08%. This strong
+accuracy is driven by the model’s high sensitivity, though limited
+specificity could be an area for improvement.
+
+C. Important predictors:
+
+-   Gender (male) emerged as the strongest predictor, with a significant
+    positive association with BG peaks.
+
+-   Insulin treatment and age also contributed strongly to the model,
+    while arterial hypertension and BG number of events were both
+    significant, with the latter showing a negative association with BG
+    peaks.
+
+-   Age, systolic BP and diastolic BP demonstrated marginal effects on
+    BG peaks.
+
+D. Numerical Stability: The model displayed some numerical instability,
+with warnings about fitted probabilities being close to 0 or 1. This may
+indicate potential issues with the model's fit, possibly due to data
+complexities.
+
+Conclusion: The logistic regression model provided solid insights into
+the predictors of BG clinical peaks, with high overall accuracy and
+strong sensitivity. However, the relatively low specificity indicates
+some limitations in correctly identifying true BG peaks, suggesting that
+further refinement might be required. Despite these challenges,
+significant variables such as gender, insulin treatment, and BG number
+of events offer valuable clinical insights for predicting high-risk BG
+peaks in patients.
+
+------------------------------------------------------------------------
+
+## Summary
+
+This project aimed to investigate the relationship between BG and BP
+levels in patients with type 2 DM and poorly controlled hypertension,
+with the additional focus on the impact of real-time BP monitoring
+through a digital platform. Over the course of nine study sections, we
+explored the interaction between BG and BP levels using various
+statistical models, including linear mixed-effects models, logistic
+regression, and moderation/mediation analyses.
+
+Key findings:
+
+-   We explored the dataset for missing values, renaming variables, and
+    preparing the data for analysis. The key variables, including BG and
+    BP levels, were examined to ensure data consistency and identify
+    potential issues early on. Missing values were minimal and did not
+    significantly impact the analyses.
+
+-   Our analysis showed that patients receiving insulin treatment
+    exhibited more stable BG levels over time. Insulin treatment
+    appeared to play a key role in stabilizing BG levels in patients,
+    even as BP monitoring was initiated.
+
+-   Through linear mixed-effects models, we identified a statistically
+    significant decline in BP levels over time after the initiation of
+    BP monitoring, particularly for systolic BP. However, pulse BP did
+    not show significant changes. Our analysis also revealed
+    multicollinearity concerns between systolic, diastolic, and pulse BP
+    measures, suggesting the need for further refinement when modeling
+    these variables together.
+
+-   Moderation and mediation models were employed to assess the
+    potential moderating effect of variables such as smoking and
+    comorbidities on the relationship between BG, BP, and other
+    covariates. The models indicated some level of moderation, although
+    certain interactions were not statistically significant,
+    underscoring the complexity of BG and BP dynamics in these patients.
+
+-   A logistic regression model was developed to predict BG peaks,
+    defined as BG levels ≥ 200 mg/dL. The model showed high accuracy in
+    detecting non-peaks but struggled with low specificity in predicting
+    true peaks. This suggests the need for further refinement to improve
+    the model’s ability to detect peaks, potentially through the
+    inclusion of more relevant predictors or addressing
+    multicollinearity issues.
+
+Perspectives:
+
+-   Clinical insights: The data highlighted the importance of insulin
+    treatment in stabilizing BG levels and suggested that BP monitoring
+    could play a role in improving patient outcomes. The relationship
+    between BG and BP is multifaceted, and controlling both factors is
+    essential for reducing the risk of cardiovascular complications.
+
+-   Data challenges: Multicollinearity between BP measures and issues of
+    specificity in the predictive model were notable challenges that
+    limited the precision of some analyses. These challenges present
+    opportunities for refining future models and incorporating more
+    sophisticated techniques, such as dimensionality reduction or
+    alternative variable transformations.
+
+-   Future research: Future studies could focus on incorporating
+    additional clinical variables, longitudinal follow-up, and
+    addressing model-specific challenges, such as improving specificity
+    in predictive models for BG peaks. Exploring other factors, such as
+    dietary habits, medications, or psychosocial influences, could
+    further clarify the interaction between BG and BP.
+
+Overall, the project has provided valuable insights into the interplay
+between BG and BP in patients with type 2 DM and highlighted the
+potential benefits of real-time BP monitoring in improving patient
+outcomes. Further research and model refinement could offer even more
+precise clinical guidance for managing these chronic conditions.
