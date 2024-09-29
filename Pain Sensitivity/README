@@ -1,1 +1,50 @@
+Pain Sensitivity
+(Introduction to Statistical Programming: Home Final Project)
 
+This repository contains the final project for the Introduction to Statistical Programming course. The project focuses on analyzing a dataset from a pain-induction experiment conducted at the University of Haifa's Laboratory of Pain, using R for statistical programming and analysis.
+
+Project Overview
+
+The project explores the relationships between pain sensitivity (to both heat and pressure stimuli) and various demographic variables (such as gender, origin, and religion). Through this analysis, we apply a variety of statistical methods to uncover potential associations and interactions between these factors, with particular emphasis on gender moderation.
+
+Key Objectives:
+
+- Analyze pain sensitivity distribution for different types of stimuli.
+- Explore the role of demographic factors in pain perception.
+- Investigate whether gender moderates the relationship between pain sensitivity to heat and pressure stimuli.
+- Apply logistic regression and model evaluation techniques to assess demographic influences.
+
+Data Description
+
+- Pain sensitivity measurements:
+-- pain60heat (heat stimuli),
+-- pain60press (pressure stimuli),
+-- follow-up pain tests at different time points
+
+- Demographic information: gender, origin, religion, education, employment status, and more.
+
+- Chronic pain indicators: including a binary variable indicating whether the participant had experienced pain for at least 3 months.
+
+Statistical methods used
+
+- Descriptive statistics to summarize the dataset.
+- Correlation analysis to investigate linear relationships between pain variables.
+- Cronbach's alpha to assess internal consistency of pain measurements.
+- Independent samples t-tests to compare pain sensitivity between genders.
+- Moderation analysis to explore gender's influence on the pain sensitivity relationship.
+- Logistic regression to model the effect of demographic variables on pain perception.
+
+Key findings
+
+- Pain sensitivity: No significant difference was found in pain sensitivity to heat stimuli between genders, but there was a significant negative association between gender and pain sensitivity to pressure stimuli.
+- Gender moderation: Gender significantly moderates the relationship between heat and pressure pain sensitivity.
+- Demographic influences: Factors like origin and religion also impact pain perception, though further model comparison is needed to refine these results.
+
+Requirements
+
+To run the code provided in this repository, you will need:
+
+- R (version 4.4.0 or later)
+- R libraries: ggplot2, dplyr, corrplot, lavaan, openxlsx
+
+You can install these libraries in R by running the following commands:
