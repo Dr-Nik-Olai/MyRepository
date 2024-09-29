@@ -1,0 +1,398 @@
+---
+title: "Introduction to Statistical Programming: Home Final Project"
+output: html_notebook
+---
+
+
+
+## Introduction
+
+This project provides a retrospective statistical description and evaluation of data obtained during a pain-induction experiment conducted at the Laboratory of Pain at the University of Haifa. Volunteers completed psychological questionnaires related to pain while their sensitivity was measured using thermal and pressure stimuli.
+
+The experiment's results (raw data) are stored in the file `data_intro_R_testL.xlsx`. The variable labels are available within the dataset. Below is a brief description of the key variables:
+
+- `Pain60` – the stimulus level corresponding to a subjective pain perception of 60 on a 0-100 scale:
+  - `pain60heat` – thermal stimuli
+  - `pain60press` – pressure stimuli
+- `Testpainheat2` / `Testpainheat9` / `Testpainheat19` – follow-up thermal tests at 2, 9, and 19 minutes after the initial test
+- `tonicpres2` / `tonicpres9` / `tonicpres19` – follow-up pressure tests at 2, 9, and 19 minutes after the initial test
+- `pain3month` – binary variable indicating whether pain lasted at least 3 months (1 = yes; 0 = no), meeting the clinical definition of chronic pain
+
+The data were imported into RStudio (v. R 4.4.0) for further analysis. The following R script was used to read the data:
+
+```{r}
+# install.packages("openxlsx")
+library(openxlsx)
+
+data <- read.xlsx("C:/Users/Asus/Desktop/DATA FILES/data_intro_R_test.xlsx", sheet = 1, colNames = TRUE)
+```
+
+
+
+## I. Data quality and validation
+
+The `str()` function has been used. The `data` argument corresponds to the dataframe of the uploaded .xlsx file.
+
+```{r}
+str(data)
+```
+
+The dataset includes 137 observations across 25 variables:
+
+- `ID`: integer (`int`), a unique identifier for each observation
+- `age`: numeric (`num`), the age of the individuals
+- `gendermale1`: integer, a binary variable where 1 indicates male gender
+- `educationyear`: numeric, years of education completed
+- `maritalstatus`: character (`chr`), marital status of individuals with values like "נשוי" (Hebrew for “married”), "לא ידוע" (Hebrew for “unknown”), "רווק" (Hebrew for “single”, “non-married”), etc.
+- `origin`: character, the origin of the individuals with values like "ישראל" (Hebrew for “Israel”), "רוסיה" (Hebrew for “Russia”), etc.
+- `religion`: character, the religion of the individuals, e.g., "יהודי" (Hebrew for “Jewish”)
+- `arab1`: integer, a binary variable indicating Arab ethnicity
+- `work`: integer, a binary variable where 1 indicates employment
+- `pain3month`: integer, see “Introduction”
+- `painweek`: character, pain level in the past week
+- `pain60heat`: numeric, see “Introduction”
+- `pain60press`: integer, see “Introduction”
+- `Testpainheat2`, `Testpainheat9`, `Testpainheat19`: integers, see “Introduction”
+- `tonicpres2`, `tonicpres9`, `tonicpres19`: integers, see “Introduction”
+- `PCSsum`: integer, a sum score of the Pain Catastrophizing Scale
+- `BSIsum`: integer, a sum score of the Brief Symptom Inventory
+- `GHQ`: integer, a score from the General Health Questionnaire
+- `SEsum`: integer, a sum score of self-efficacy measures
+- `PSQsum`: integer, the Perceived Stress Questionnaire sum score
+- `PSQIsum`: integer, the Pittsburgh Sleep Quality Index sum score
+
+In the analysis of the dataframe, we identified various types of non-applicable or missing values, which are crucial for understanding data integrity:
+
+- NA values: the truly missing data points within our dataset recognized directly by `is.na()` function; our inspection shows several instances scattered across multiple columns, indicating potential gaps in data collection or entry
+- empty strings: some entries are recorded as empty strings. They represent a lack of information but are not true missing values. This type of "missing" data needs addressing to prevent misinterpretation in data analysis
+- zeros and entries labeled "לא ידוע" ("unknown") represent missing data that must be addressed for accurate analysis
+
+In our analysis, we encountered values that were potentially unreliable or outlying, which necessitated careful consideration to maintain the integrity of our dataset. We categorized these values into three groups based on their characteristics and implications for our study:
+
+1. Minor missing data:
+
+- marital status: 18 participants had an 'unknown' marital status (labeled as "לא ידוע" in Hebrew)
+- educational years: 2 cases were missing data on the number of years of education completed
+- employment status: there was 1 case missing information on employment status
+
+Although these missing data points were noted, they were deemed of low clinical significance within the context of our study, and thus, the corresponding participant cases were not excluded from the dataset.
+
+2. Suspect pain test results:
+
+- thermal and pressure pain tests: we observed results that were either exceptionally low (0-9) or high (100) across 55 cases in specific tests assessing response to thermal and pressure pain stimuli
+
+While these values were unusual, they were not considered clinically impossible. Therefore, we decided not to exclude these cases based on these results alone.
+
+3. Corrupted data leading to exclusion:
+
+- a single case (ID = 150) showed completely missing results for the Testpainheat9/19 test and an implausibly high value of 455 for the pain60heat test
+
+Given the clear data corruption, this case was excluded from the analysis. The dataset was filtered to exclude ID 150 due to corrupted data.
+
+```{r}
+data_valid <- subset(data, ID != 150)
+```
+
+The exclusion was handled by creating a new subset (`data_valid`) without this particular ID, ensuring that the integrity of the original raw dataset (`data`) was preserved to allow full transparency for prospective reviewers, and reproducibility of the analysis process.
+
+
+
+## II. Description of the sample
+
+The sample consists of participants with diverse characteristics:
+
+- age: from 18.5 to 67 (mean 29) years old
+- gender: males (51,47%) and females (48.53%)
+- educational background: represented by overall years of education (from 3 to 21, average 15 years)
+- marital status: married (13.24%), divorced (63.97%), single (2.21%), and those whose marital status is unknown (20.59%)
+- country of origin: Israel (76.47%), Ethiopia (18.38%), or Russia (5.15%)
+- religious affiliation: Jewish (36.76%), Muslims (50%), Christians (14.71%), Druzes (2.94%), or other
+- Arab origin: a subset of the sample is of Arab origin (52.94%)
+- chronic pain: those who have been suffering from chronic pain (defined as any pain syndrome that lasted ≥ 3 months continually) (34.56%) and those who have not
+
+
+
+## III. Distribution of `pain60heat` for women reporting chronic pain
+
+To analyze the distribution of `pain60heat` among women who have reported pain for at least three months (`pain3month` = 1), we first filtered our dataset to include only female participants. We filtered for female participants (`gendermale1` == 2).
+
+```{r}
+library(dplyr)
+
+ChrPain_F <- data_valid %>% 
+filter(gendermale1 == 2, pain3month == 1)
+```
+
+Then we used the `hist()` function to create a histogram of the `pain60heat` variable distribution within this group.
+
+```{r}
+library(ggplot2)
+
+ggplot(ChrPain_F, aes(x = pain60heat)) + geom_histogram(binwidth = 1, color = "black", fill = "blue") + labs(title = "Distribution of pain60heat for Women with Pain ≥ 3 Months", x = "pain60heat", y = "Frequency")
+```
+
+As we can see, the `pain60heat` values are spread from about 42 to 48. The distribution is unimodal, centered around 46, with slight right asymmetry.
+
+
+
+## IV. Investigation of the correlational patterns
+
+To investigate correlational patterns among key variables, we first identified and selected relevant columns for our analysis. This was done by creating vectors, named `selected_vars1` and `selected_vars2` for different subtasks, which contain the names of the variables of interest. This selective approach allows us to focus our analysis on specific aspects of our data that are most relevant to our research questions. We calculated a correlation matrix using the `cor()` function to explore relationships between key variables. Correlation coefficients range from -1 (perfect negative correlation) to 1 (perfect positive correlation), with 0 indicating no linear relationship.
+
+
+
+### 4.1. Correlations between `pain60heat`, `pain60press`, `Testpainheat2`, `Testpainheat9`, `Testpainheat19`, `tonicpres2`, `tonicpres9`, `tonicpres19`
+
+```{r}
+data_valid$Testpainheat9 <- as.numeric(data_valid$Testpainheat9)
+data_valid$Testpainheat19 <- as.numeric(data_valid$Testpainheat19)
+
+selected_vars1 <- c("pain60heat", "pain60press", "Testpainheat2",
+"Testpainheat9", "Testpainheat19", "tonicpres2", "tonicpres9",
+"tonicpres19")
+
+correlation_matrix1 <- cor(data_valid[selected_vars1])
+
+print(correlation_matrix1)
+```
+
+We visualized the correlation matrix using the `corrplot` package.
+
+```{r}
+# install.packages("corrplot", dependencies = TRUE) 
+library(corrplot)
+
+corrplot(correlation_matrix1, method = "color", type = "upper", order =
+"hclust", tl.col = "black", tl.cex = 0.6, tl.srt = 45, addCoef.col =
+"black", diag = FALSE )
+```
+
+This generated a color-coded correlation plot, where the strength and direction of correlations are indicated by color and optionally the correlation coefficients themselves. We displayed only the upper part of the matrix to avoid redundancy.
+
+For evaluation of possible non-linear associations between perception of different pain stimuli (e.g., pain60heat and pain60press), we applied plotting scatter plots with a smoothing curve:
+
+```{r}
+ggplot(data_valid, aes(x = pain60heat, y = pain60press)) +
+geom_point(alpha = 0.4) + geom_smooth(method = "loess", color = "red")
+```
+
+
+
+### 4.2. Correlations between `PCSsum`, `BSIsum`, `GHQ`, `SEsum`, `PSQsum`, `PSQIsum`
+
+```{r}
+data_subset <- data_valid[, c("PCSsum", "BSIsum", "GHQ", "SEsum", "PSQsum", "PSQIsum")]
+
+print(colSums(is.na(data_subset)))
+
+data_subset_complete <- data_subset[complete.cases(data_subset), ]
+
+print(dim(data_subset_complete))  
+print(names(data_subset_complete))  
+
+correlation_matrix <- cor(data_subset_complete)
+print(correlation_matrix)
+```
+
+
+
+### 4.3. Checking the possibility of aggregating `Testpainheat2` / `Testpainheat9` / `Testpainheat19` and `tonicpres2` / `tonicpres9` / `tonicpres19`
+
+We calculated Cronbach's alpha (α) to assess internal consistency for the sets of variables related to heat and pressure stimuli.
+
+```{r}
+test_pain_heat_vars <- c("pain60heat", "Testpainheat2", "Testpainheat9", "Testpainheat19")
+tonic_pres_vars <- c("pain60press", "tonicpres2", "tonicpres9", "tonicpres19")
+
+alpha_pain_heat_manual <- cronbach_alpha(data_valid[, test_pain_heat_vars, drop = FALSE])
+alpha_tonic_pres_manual <- cronbach_alpha(data_valid[, tonic_pres_vars, drop = FALSE])
+
+print(paste("Manual Cronbach's Alpha for Pain Heat Variables:", alpha_pain_heat_manual))
+print(paste("Manual Cronbach's Alpha for Tonic Pressure Variables:", alpha_tonic_pres_manual))
+```
+
+The results obtained:
+
+- pain heat variables: α = 0.7328 (good reliability); this alpha value (> 0.7) indicates that the pain heat variables are reasonably consistent and provide a reliable measure
+
+- tonic pressure variables: α = 0.9431 (excellent reliability); this high alpha value indicates strong consistency among the tonic pressure variables
+
+
+
+## V. Graphically displaying the relationship between `pain60heat` and `pain60press` by gender.
+
+We used a scatter plot to visualize the gender association between `pain60heat` and `pain60press`, coloring points by gender.
+
+```{r}
+library(ggplot2)
+
+data_valid$gender <- factor(data_valid$gendermale1, labels = c("males", "females")) 
+ggplot(data_valid, aes(x = pain60heat, y = pain60press, color = gender)) + geom_point() + labs(x = "pain60heat", y = "pain60press", color = "gender") + ggtitle("Association between pain60heat and pain60press by gender")
+```
+
+
+
+## VI. Testing the hypotheses. Their graphical representations, and reporting the findings
+
+### 6.1. Do women have increased pain threshold compairing with men? (As measured by “Pain60” perception tests described above.)
+
+We extracted the necessary variables from the validated dataframe, including the pain threshold measurements (`pain60heat` and `pain60press`) and the gender variable (`gendermale1`). We split the data by gender (male and female). And we compared pain thresholds between genders using an independent samples t-test (Welch’s variant) to account for unequal variances.
+
+```{r}
+pain_threshold <- data_valid[, c("pain60heat", "pain60press")] 
+
+gender <- data_valid$gendermale1
+
+male_threshold <- pain_threshold[gender == 1, ] 
+
+female_threshold <- pain_threshold[gender == 2, ]
+
+t_test <- t.test(male_threshold, female_threshold) 
+
+t_test
+```
+
+We concatenated the `pain60heat` and `pain60press` columns and repeated the `gendermale1` values to create a new dataframe `data_modified`. We used a boxplot to compare pain threshold distributions between genders.
+
+```{r}
+pain_threshold <- c(data_valid$pain60heat, data_valid$pain60press)
+
+gender <- rep(data_valid$gendermale1, times = 2)
+
+data_modified <- data.frame(pain_threshold, gender)
+
+boxplot(pain_threshold ~ gender, data = data_modified, xlab = "gender", ylab = "pain threshold", main = "Comparison of pain threshold between males and females")
+```
+
+Since the p-value (0.08663) is greater than 0.05, we did not find sufficient evidence to conclude a significant difference in pain thresholds between genders.
+
+
+
+### 6.2. Is an association between “Pain60” measurements moderated by gender?
+
+We modeled the interaction between gender and `pain60heat` and `pain60press`.
+
+```{r}
+# install.packages("lavaan")
+library(lavaan)
+
+model <- " pain60heat ~ gender
+
+pain60press ~ gender
+
+pain60heat ~ gender * pain60press 
+
+pain60press ~ gender * pain60heat "
+
+fit <- sem(model, data = data_valid)
+
+varTable(fit)
+```
+
+A post-hoc analysis was performed as follows.
+
+```{r}
+posthoc <- modificationIndices(fit) 
+
+posthoc
+```
+
+The modification indices (MI) for gender and pain associations were 0, indicating no additional associations were needed.
+
+We plotted the interaction between gender and pain60 measurements using a linear regression line.
+
+```{r}
+ggplot(data_valid, aes(x = pain60heat, y = pain60press, color = factor(gender))) + geom_point() + geom_smooth(method = "lm", formula = y ~ x, se = FALSE) + labs(x = "pain60heat", y = "pain60press", color = "gender") + theme_minimal()
+```
+
+The findings were reported by using the `summary()` function.
+
+```{r}
+summary(fit)
+```
+
+The estimated coefficient for gender in relation to pain60heat was 0.256, indicating a positive association. However, with a p-value of 0.314 (greater than the significance level of 0.05), there was no sufficient evidence to conclude a significant association between `pain60heat` and gender.
+
+In contrast, the estimated coefficient for `pain60press` was -97.424, indicating a negative association with gender. The p-value for this coefficient was 0.000, which is less than 0.05, providing strong evidence of a significant association between `pain60press` and gender.
+
+Regarding the moderation effect, the interaction terms for gender with both `pain60press` and `pain60heat` were estimated at 0.012, with p-values of 0.000 for both. This indicates a significant moderation effect of gender on the association between `pain60heat` and `pain60press`.
+
+In summary, gender is significantly associated with `pain60press` but not with `pain60heat`. Additionally, gender significantly moderates the relationship between `pain60heat` and `pain60press`.
+
+
+
+### 6.3. Does Brief Symptom Inventory (i.e. "BSIsum" variable in our dataframe) predict chronic pain (pain lasting ≥ 3 months, or "pain3month" = 1 in our dataframe)?
+
+We first performed logistic regression.
+
+```{r}
+logit_model <- glm(pain3month ~ BSIsum, data = data_valid, family = binomial) 
+
+logit_model
+
+glm(formula = pain3month ~ BSIsum, family = binomial, data = data_valid)
+```
+
+Then we generated predicted probabilities after identification of the complete cases in the `data_valid` dataframe.
+
+```{r}
+complete_cases <- complete.cases(data_valid)
+
+data_valid_complete <- data_valid[complete_cases, ]
+
+data_valid_complete$predicted_prob <- predict(logit_model, newdata = data_valid_complete, type = "response")
+```
+
+Plotting the relationship between BSIsum and chronic pain showed the follows:
+
+```{r}
+ggplot(data_valid_complete, aes(x = BSIsum, y = predicted_prob)) + geom_point() + geom_smooth(method = "glm", method.args = list(family = "binomial"), se = FALSE) + labs(x = "Brief Symptom Inventory (BSIsum)", y = "predicted probability of chronic pain") + theme_minimal()
+```
+
+Reporting the findings:
+
+```{r}
+summary(logit_model)
+
+glm(formula = pain3month ~ BSIsum, family = binomial, data = data_valid)
+```
+
+Based on the output of the `summary()` function, we can interpret the model coefficients as follows:
+
+- the estimated intercept was 3.918353. This represents the log odds of the outcome variable when all other predictor variables are held at zero
+- the coefficient for age was -0.041712. This indicates that for each one-unit increase in age, the log odds of the outcome variable decreased by 0.041712, holding all other variables constant
+- the coefficient for `gendermale1` was 0.782675. This suggests that being male is associated with an increase in the log odds of the outcome variable by 0.782675, compared to being female, while controlling for other variables
+- the coefficient for `educationyear` was -0.073726. This suggests that for each additional year of education, the log odds of the outcome variable decrease by 0.073726, holding all other variables constant
+- the coefficients for the different levels of `maritalstatus` represented the difference compared to the reference category (which is not specified in the output). For example, being "נשוי" (married) is associated with a decrease in the log odds of the outcome variable by 0.843505, compared to the reference category
+- the coefficients for variables like `origin` and `religion` represent differences compared to a reference category. For instance, being from Russia decreased the log odds of the outcome by 1.516 compared to the reference
+- the other coefficients (for `arab1`, `work`, `Testpainheat2` etc.) represented the estimated change in the log odds of the outcome variable associated with a one-unit increase in the corresponding predictor variable, holding all other variables constant
+
+For the model fit assessment, we examined the residual deviance and Akaike Information Criterion (AIC) value.
+
+```{r}
+residual_deviance <- logit_model$deviance 
+
+AIC_value <- AIC(logit_model) 
+
+residual_deviance 
+
+AIC_value
+```
+
+Residual deviance (118.571) indicates how well the model fits the data, with lower values generally suggesting a better fit. The AIC (172.571) also accounts for model complexity, with lower AIC values indicating better fit. However, it is most useful when comparing models.
+
+
+
+## Final conclusions
+
+In this project, we applied various statistical methods to investigate the relationships between pain perception and demographic variables in a sample of participants. We analyzed the distribution of pain sensitivity across different types of stimuli and explored whether gender and other factors influenced these associations.
+
+Key findings include:
+
+- There was no significant difference in pain sensitivity to heat stimuli between genders, but a significant negative association was found between gender and pain sensitivity to pressure stimuli.
+
+- Gender also significantly moderated the relationship between pain sensitivity to heat and pressure stimuli.
+
+- The logistic regression model provided insight into how demographic factors like origin and religion affected the outcome. However, model fit assessment using residual deviance and AIC values indicated the need for further comparison with alternative models.
+
+Overall, this analysis highlights the complex interplay between demographic factors and pain perception, emphasizing the importance of thorough model evaluation and comparison in statistical programming.
