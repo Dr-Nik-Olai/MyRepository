@@ -7,7 +7,7 @@ output: html_notebook
 
 ## Introduction
 
-This project provides a retrospective statistical description and evaluation of data obtained during a pain-induction experiment conducted at the Laboratory of Pain at the University of Haifa. Volunteers completed psychological questionnaires related to pain while their sensitivity was measured using thermal and pressure stimuli.
+This project provides a retrospective statistical description and evaluation of data obtained during a pain-induction experiment. Volunteers completed psychological questionnaires related to pain while their sensitivity was measured using thermal and pressure stimuli.
 
 The experiment's results (raw data) are stored in the file `data_intro_R_testL.xlsx`. The variable labels are available within the dataset. Below is a brief description of the key variables:
 
